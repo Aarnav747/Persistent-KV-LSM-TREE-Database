@@ -18,13 +18,17 @@ struct wal_struct {
 	/* key + val are added later in 'buffer' during the call to wal_write() */
 };
 
-typedef struct skip_list_mmt_struct {
+typedef struct memtable_struct {
+	node* headers[MAX_LAYER_LEVEL];	
+	arena
+} mmt_inst;
+
+typedef struct skip_list_node_struct {
 	int layer_cnt; // number of total layers this node appears in
 	char* buff_ptr; // skips past the pointer array in buffer and points to where the key bytes begin 
 	node** next_ptrs; // points to the buffer's pointer array part. the pointer array size is (layer_cnt * sizeof(node*))
 	size_t key_len;
 	size_t val_len;
-	node* head_nodes[MAX_LAYER_LEVEL]; // dummy nodes that help us traverse each of the layer sequentially, because they act as empty headers
 	char buffer[]; // stores key and val bytes, aswell as the 'next' pointers of different layers. buffer layout: [pointer array][key bytes][value bytes]
 } node;
 
@@ -33,6 +37,11 @@ typedef struct arena_struct {
 	size_t offset;
 	size_t total_size;
 } arena;
+
+typedef struct memtable_struct {
+	node* headers[MAX_LAYER_LEVEL]; // dummy nodes that help us traverse each of the layer sequentially, because they act as empty headers
+	arena* arena_mem;
+} mmt_inst;
 
 int pick_layercnt() {
 
@@ -70,10 +79,10 @@ char* alloc_mem(arena* arena_mem, size_t size_req) {
 	return new_mem_ptr;
 }
 
-node* create_node(char key[], size_t key_len, char val[], size_t val_len, arena* arena_mem) {
+node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst cur_inst) {
 
 	int layer_cnt = pick_layer();
-	node* cur_node = (node*)alloc_mem(arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))));	
+	node* cur_node = (node*)alloc_mem(cur_inst->arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))));	
 	if (cur_node == NULL) return NULL;
 
 	cur_node->layer_cnt = layer_cnt;
@@ -89,12 +98,21 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, arena*
 	return cur_node;
 }
 
-void traverse_layers(char key[]) {
+void traverse_layers(char key[], size_t key_len) {
 
-	for (int n = MAX_LAYER_LEVEL; n >= 0; n--) {
-		if () {
+	int memcmp_ret;
+	for (int n = (MAX_LAYER_LEVEL - 1); n >= 0; n--) {
+		node* cur_node = mmt_inst->headers[n];
 
+		while (cur_node != NULL) {
+			memcmp_ret = memcmp(cur_node, key, key_len);
+			if (memcmp_ret > 0) {
+				cur_node = cur_node->next_ptrs[n];
+			} else if () {
+				
+			}
 		}
+
 	}
 
 	/*int cur_layer_cnt = head_node->layer_cnt;
