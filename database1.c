@@ -98,39 +98,46 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_in
 	return cur_node;
 }
 
-void traverse_layers(char key[], size_t key_len) {
+void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
 
 	int memcmp_ret;
+	node* cur_node = NULL;
+	node* past_node = NULL;
+	int len;
 	for (int n = (MAX_LAYER_LEVEL - 1); n >= 0; n--) {
-		node* cur_node = mmt_inst->headers[n];
+		if (past_node == NULL) {
+			cur_node = mmt_inst->headers[n];
+		} else {
+			past_nodes[n] = past_node;
+			cur_node = past_node->next_ptrs[n];
+		}
 
 		while (cur_node != NULL) {
-			memcmp_ret = memcmp(cur_node, key, key_len);
-			if (memcmp_ret > 0) {
+			if (cur_node->key_len < key_len) {
+				len = cur_node->key_len;
+			} else {
+				len = key_len;
+			}
+
+			memcmp_ret = memcmp(cur_node->buff_ptr, key, len);
+			if (memcmp_ret == 0) {
+				if (cur_node->key_len > key_len) {
+					cur_node = NULL;
+				} else {
+
+					past_node = cur_node;
+					cur_node = cur_node->next_ptrs[n];
+				}
+			} else if (memcmp_ret < 0) {
+				past_node = cur_node;
 				cur_node = cur_node->next_ptrs[n];
-			} else if () {
-				
+			} else {
+				cur_node = NULL;
 			}
 		}
 
 	}
 
-	/*int cur_layer_cnt = head_node->layer_cnt;
-	node* layer_node = head_node->next_ptrs[cur_layer_cnt];
-	char key[cur_node->key_len];
-	char layer_key[layer_node->key_len];
-
-	while (1) {
-
-		memcpy(buff_ptr, cur_node->key_len, key);
-		memcpy(layer_node->buff_ptr, layer_node->key_len, layer_key);
-
-		if ((int strcmp_ret = strcmp()) < ) {
-			cur_layer_cnt--;
-			if (head_node->next_ptrs[cur_layer_cnt] == NULL) return;
-			layer_node = head_node->next_ptrs[cur_layer_cnt];
-		} 
-	}*/
 
 }
 
@@ -207,26 +214,6 @@ int wal_read(int wal_fd) {
 	}
 
 	return 0;
-
-}
-
-avl_tree* find_node(avl_tree* cur_node, char key[]) {
-
-	if (cur_node == NULL) return NULL;
-
-	int strcmp_ret = strcmp(cur_node->key, key);
-
-	if (strcmp_ret == 0) return cur_node;
-	
-	if (strcmp_ret < 0) return find_node(cur_node->left, key);
-	
-	return find_node(cur_node->right, key);
-
-}
-
-void put_list() {
-
-	
 
 }
 
