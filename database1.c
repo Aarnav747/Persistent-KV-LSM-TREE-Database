@@ -39,7 +39,7 @@ typedef struct arena_struct {
 } arena;
 
 typedef struct memtable_struct {
-	node* headers[MAX_LAYER_LEVEL]; // dummy nodes that help us traverse each of the layer sequentially, because they act as empty headers
+	node* headers[MAX_LAYER_LEVEL]; // pointers that help us traverse each of the layer sequentially, because they act as point to the first nodes of each layer
 	arena* arena_mem;
 } mmt_inst;
 
@@ -108,7 +108,6 @@ void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
 		if (past_node == NULL) {
 			cur_node = mmt_inst->headers[n];
 		} else {
-			past_nodes[n] = past_node;
 			cur_node = past_node->next_ptrs[n];
 		}
 
@@ -136,8 +135,35 @@ void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
 			}
 		}
 
+		past_nodes[n] = past_node;
+
 	}
 
+
+}
+
+void insert_node(node* cur_node, mmt_inst* cur_inst) {
+
+	node* past_nodes[MAX_LAYER_LEVEL];
+
+	traverse_layers(cur_node->buff_ptr, cur_node->key_len, past_nodes);
+
+	node* past_node = NULL;
+	node* next_node = NULL;
+	for (int n = (cur_node->layer_cnt - 1); n >= 0; n--) {
+		past_node = past_nodes[n];
+
+		if (past_node == NULL) {
+			next_node = cur_inst->headers[n];
+			cur_inst->headers[n] = cur_node;
+			cur_node->next_ptrs[n] = next_node;
+			continue;
+		}
+
+		next_node = past_node->next_ptrs[n];
+		past_node->next_ptrs[n] = cur_node;
+		cur_node->next_ptrs[n] = next_node;
+	}
 
 }
 
