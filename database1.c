@@ -24,7 +24,7 @@ typedef struct skip_list_node_struct {
 	node** next_ptrs; // points to the buffer's pointer array part. the pointer array size is (layer_cnt * sizeof(node*))
 	size_t key_len;
 	size_t val_len;
-	int del_status; // shows the current status of the node, could be either active (0) or deleted (-1)
+	int del_status; // shows the current status of the node, could be either active (0) or deleted (1)
 	char buffer[]; // stores key and val bytes, aswell as the 'next' pointers of different layers. buffer layout: [pointer array][key bytes][value bytes]
 } node;
 
@@ -75,7 +75,7 @@ char* alloc_mem(arena* arena_mem, size_t size_req) /* function to allocate an ar
 	return new_mem_ptr;
 }
 
-node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst cur_inst) {
+node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst* cur_inst) {
 
 	int layer_cnt = pick_layer();
 	node* cur_node = (node*)alloc_mem(cur_inst->arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))));	
@@ -86,8 +86,11 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_in
 	cur_node->val_len = val_len;
 
 	cur_node->buff_ptr = cur_node->buffer + (layer_cnt * sizeof(node*));
+
 	memcpy(cur_node->buff_ptr, key, cur_node->key_len);
-	memcpy(cur_node->buff_ptr + cur_node->key_len, val, (cur_node->val_len));
+	if (cur_node->val_len != 0) {
+		memcpy(cur_node->buff_ptr + cur_node->key_len, val, cur_node->val_len);
+	}
 
 	cur_node->next_ptrs = (node**)cur_node->buffer;
 
@@ -138,7 +141,7 @@ void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
 
 }
 
-void insert_node(node* cur_node, mmt_inst cur_inst) {
+void insert_node(node* cur_node, mmt_inst* cur_inst) {
 
 	node* past_nodes[MAX_LAYER_LEVEL];
 
@@ -149,11 +152,15 @@ void insert_node(node* cur_node, mmt_inst cur_inst) {
 	for (int n = (cur_node->layer_cnt - 1); n >= 0; n--) {
 		past_node = past_nodes[n];
 
-		if (past_node == NULL) {
+		if (past_node == NULL) /* no node key smaller than the selected key exists in this layer, so make the new node (cur_node) the header of that list */ {
 			next_node = cur_inst->headers[n];
 			cur_inst->headers[n] = cur_node;
 			cur_node->next_ptrs[n] = next_node;
 			continue;
+		} else if (cur_node->key_len == past_node->key_len) /* check for duplicates */ {
+			int memcmp_ret = memcmp(cur_node->buff_ptr, past_node->buff_ptr, cur_node->key_len);
+
+			if (memcmp_ret == 0) continue;
 		}
 
 		next_node = past_node->next_ptrs[n];
@@ -179,6 +186,12 @@ node* lookup_node(char key[], size_t key_len) {
 }
 
 int delete_node(char key[], size_t key_len, mmt_inst cur_inst) {
+
+	node* cur_node = lookup_node(key, key_len);
+
+	if (cur_node != NULL) {
+		
+	}
 
 	node* cur_node = create_node(key, key_len, NULL, 0, cur_inst); // we create a new node because if there's a possibility of the node (that the user is trying to delete) does not exist in the current in-memory memtable, but it MIGHT exist in a previously flushed memtable (hence sstable) or a different flush-pending memtable, then we cannot just access and modify the sstable or memtable ,so we instead create a new duplicate node, set it's status to delete, and then once this memtable also gets flushed, we'll try to handle the status of the original node. and if the node doesn't exist at all anywhere, then we don't really loose nothing,cause it's set to deleted anyway
 
