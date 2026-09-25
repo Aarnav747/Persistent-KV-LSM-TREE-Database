@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 
 #define IO_TYPE_SET_PUT 0 // to define 'io_type' as PUT
 #define IO_TYPE_SET_DEL 1 // to define 'io_type' as DEL
@@ -24,7 +25,7 @@ typedef struct skip_list_node_struct {
 	node** next_ptrs; // points to the buffer's pointer array part. the pointer array size is (layer_cnt * sizeof(node*))
 	size_t key_len;
 	size_t val_len;
-	int del_status; // shows the current status of the node, could be either active (0) or deleted (1)
+	int del_status; // shows the current status of the node, could be either active (0 / IO_TYPE_SET_PUT) or deleted (1 / IO_TYPE_SET_DEL)
 	char buffer[]; // stores key and val bytes, aswell as the 'next' pointers of different layers. buffer layout: [pointer array][key bytes][value bytes]
 } node;
 
@@ -97,7 +98,7 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_in
 	return cur_node;
 }
 
-void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
+void traverse_layers(char key[], size_t key_len, node* past_nodes[], mmt_inst* cur_inst) {
 
 	int memcmp_ret;
 	node* cur_node = NULL;
@@ -105,7 +106,7 @@ void traverse_layers(char key[], size_t key_len, node* past_nodes[]) {
 	int len;
 	for (int n = (MAX_LAYER_LEVEL - 1); n >= 0; n--) {
 		if (past_node == NULL) {
-			cur_node = mmt_inst->headers[n];
+			cur_node = cur_inst->headers[n];
 		} else {
 			cur_node = past_node->next_ptrs[n];
 		}
@@ -170,11 +171,11 @@ void insert_node(node* cur_node, mmt_inst* cur_inst) {
 
 }
 
-node* lookup_node(char key[], size_t key_len) {
+node* lookup_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 
 	node *past_nodes[MAX_LAYER_LEVEL];
 
-	traverse_layers(key, key_len, past_nodes); // by traversing the skip list and storing the previous nodes it becomes easier and faster to find the node with the key, we're searching for, compared to traversing the original skip list (which might take O(n)), this approach can possibly take O(log(n)) instead. and we can confirm that the node, if it exists, will be at layer 1 (the original skip list), so it will be at past_nodes[0]
+	traverse_layers(key, key_len, past_nodes, cur_inst); // by traversing the skip list and storing the previous nodes it becomes easier and faster to find the node with the key, we're searching for, compared to traversing the original skip list (which might take O(n)), this approach can possibly take O(log(n)) instead. and we can confirm that the node, if it exists, will be at layer 1 (the original skip list), so it will be at past_nodes[0]
 
 	if (past_nodes[0] == NULL) return NULL;
 
@@ -183,6 +184,47 @@ node* lookup_node(char key[], size_t key_len) {
 	if (memcmp_ret == 0 && past_nodes[0]->key_len == key_len) return past_nodes[0];
 
 	return NULL;
+}
+
+void put_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst* cur_inst) {
+
+	node* old_node = lookup_node(key, key_len);
+
+	node* cur_node = create_node(key, key_len, val, val_len, cur_inst);
+
+	if (old_node != NULL) {
+		node* past_nodes[MAX_LAYER_LEVEL];
+		node* past_node;
+		node* next_node;
+
+		traverse_layers(key, key_len, past_nodes, cur_inst);
+
+		int layer_cnt = MAX(old_node->layer_cnt, cur_node->layer_cnt);
+
+		for (int n = (layer_cnt - 1); n>=0; n--) {
+			past_node = past_nodes[n];
+
+			if (n < old_node->layer_cnt && n < cur_node->layer_cnt) {
+				next_node = old_node->next_ptrs[n];
+				past_node->next_ptrs[n] = cur_node;
+				cur_node->next_ptrs[n] = next_node;
+			} else if (n < old_node->layer_cnt && n >= cur_node->layer_cnt) {
+				next_node = old_node->next_ptrs[n];
+				past_node->next_ptrs[n] = next_node;
+			} else if (n < cur_node->layer_cnt && n >= old_node->layer_cnt) {
+				next_node = past_node->next_ptrs[n];
+				past_node->next_ptrs[n] = cur_node;
+				cur_node->next_ptrs[n] = next_node;
+
+			}
+
+		}
+
+		return;
+	}
+
+	insert_node(cur_node, cur_inst);
+
 }
 
 int delete_node(char key[], size_t key_len, mmt_inst cur_inst) {
