@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <assert.h>
 
 #define IO_TYPE_SET_PUT 0 // to define 'io_type' as PUT
 #define IO_TYPE_SET_DEL 1 // to define 'io_type' as DEL
@@ -19,7 +20,9 @@ struct wal_struct {
 	/* key + val are added later in 'buffer' during the call to wal_write() */
 };
 
-typedef struct skip_list_node_struct {
+typedef struct skip_list_node_struct node;
+
+struct skip_list_node_struct {
 	int layer_cnt; // number of total layers this node appears in
 	char* buff_ptr; // skips past the pointer array in buffer and points to where the key bytes begin 
 	node** next_ptrs; // points to the buffer's pointer array part. the pointer array size is (layer_cnt * sizeof(node*))
@@ -27,7 +30,7 @@ typedef struct skip_list_node_struct {
 	size_t val_len;
 	int del_status; // shows the current status of the node, could be either active (0 / IO_TYPE_SET_PUT) or deleted (1 / IO_TYPE_SET_DEL)
 	char buffer[]; // stores key and val bytes, aswell as the 'next' pointers of different layers. buffer layout: [pointer array][key bytes][value bytes]
-} node;
+};
 
 typedef struct arena_struct {
 	char* mem_ptr;
@@ -45,7 +48,7 @@ int pick_layercnt() /* a function that is used to select the no. of layers for e
 	int rand_ret = rand();
 
 	int layer_limit = (RAND_MAX / 2);
-	int layer_cnt = 1; // layer 1 corresponds to the first layer, which is the linked list itself
+	int layer_cnt = 0; // layer 0 corresponds to the first layer, which is the linked list itself
 	if (rand_ret <= layer_limit) {
 		while (rand_ret < layer_limit) {
 			if (layer_cnt == MAX_LAYER_LEVEL) break;
@@ -76,15 +79,17 @@ char* alloc_mem(arena* arena_mem, size_t size_req) /* function to allocate an ar
 	return new_mem_ptr;
 }
 
-node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst* cur_inst) {
+node* create_node(char key[], size_t key_len, char val[], size_t val_len, int io_type, mmt_inst* cur_inst) {
 
-	int layer_cnt = pick_layer();
+	int layer_cnt = pick_layercnt();
+
 	node* cur_node = (node*)alloc_mem(cur_inst->arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))));	
 	if (cur_node == NULL) return NULL;
 
 	cur_node->layer_cnt = layer_cnt;
 	cur_node->key_len = key_len;
 	cur_node->val_len = val_len;
+	cur_node->del_status = io_type;
 
 	cur_node->buff_ptr = cur_node->buffer + (layer_cnt * sizeof(node*));
 
@@ -94,6 +99,7 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, mmt_in
 	}
 
 	cur_node->next_ptrs = (node**)cur_node->buffer;
+	memset(cur_node->next_ptrs, 0, layer_cnt * sizeof(node*));
 
 	return cur_node;
 }
@@ -146,7 +152,7 @@ void insert_node(node* cur_node, mmt_inst* cur_inst) {
 
 	node* past_nodes[MAX_LAYER_LEVEL];
 
-	traverse_layers(cur_node->buff_ptr, cur_node->key_len, past_nodes);
+	traverse_layers(cur_node->buff_ptr, cur_node->key_len, past_nodes, cur_inst);
 
 	node* past_node = NULL;
 	node* next_node = NULL;
@@ -158,11 +164,7 @@ void insert_node(node* cur_node, mmt_inst* cur_inst) {
 			cur_inst->headers[n] = cur_node;
 			cur_node->next_ptrs[n] = next_node;
 			continue;
-		} else if (cur_node->key_len == past_node->key_len) /* check for duplicates */ {
-			int memcmp_ret = memcmp(cur_node->buff_ptr, past_node->buff_ptr, cur_node->key_len);
-
-			if (memcmp_ret == 0) continue;
-		}
+		} 
 
 		next_node = past_node->next_ptrs[n];
 		past_node->next_ptrs[n] = cur_node;
@@ -186,13 +188,15 @@ node* lookup_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 	return NULL;
 }
 
-void put_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst* cur_inst) {
+node* put_node(char key[], size_t key_len, char val[], size_t val_len, int io_type, mmt_inst* cur_inst) {
 
-	node* old_node = lookup_node(key, key_len);
+	node* old_node = lookup_node(key, key_len, cur_inst);
 
-	node* cur_node = create_node(key, key_len, val, val_len, cur_inst);
+	node* cur_node = create_node(key, key_len, val, val_len, io_type, cur_inst);
 
-	if (old_node != NULL) {
+	if (cur_node == NULL) {
+		return NULL;
+	} else if (old_node != NULL) {
 		node* past_nodes[MAX_LAYER_LEVEL];
 		node* past_node;
 		node* next_node;
@@ -220,33 +224,26 @@ void put_node(char key[], size_t key_len, char val[], size_t val_len, mmt_inst* 
 
 		}
 
-		return;
+		return cur_node;
 	}
 
 	insert_node(cur_node, cur_inst);
 
+	return cur_node;
 }
 
-int delete_node(char key[], size_t key_len, mmt_inst cur_inst) {
+int delete_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 
-	node* cur_node = lookup_node(key, key_len);
+	char val[] = "";
 
-	if (cur_node != NULL) {
-		
-	}
-
-	node* cur_node = create_node(key, key_len, NULL, 0, cur_inst); // we create a new node because if there's a possibility of the node (that the user is trying to delete) does not exist in the current in-memory memtable, but it MIGHT exist in a previously flushed memtable (hence sstable) or a different flush-pending memtable, then we cannot just access and modify the sstable or memtable ,so we instead create a new duplicate node, set it's status to delete, and then once this memtable also gets flushed, we'll try to handle the status of the original node. and if the node doesn't exist at all anywhere, then we don't really loose nothing,cause it's set to deleted anyway
+	node* cur_node = put_node(key, key_len, val, 0, IO_TYPE_SET_DEL, cur_inst); 
 
 	if (cur_node == NULL) return -1;
-
-	cur_node->del_status = IO_TYPE_SET_DEL; // set status to deleted
-
-	insert_node(cur_node, cur_inst);
 
 	return 0;
 }
 
-int read_all(int fd, struct wal_struct *wal_record, size_t struct_size) {
+/* int read_all(int fd, struct wal_struct *wal_record, size_t struct_size) {
 	
 	int read_bytes = read(fd, wal_record, struct_size);
 
@@ -260,14 +257,14 @@ int read_all(int fd, struct wal_struct *wal_record, size_t struct_size) {
 		}
 	}
 
-}
+} */
 
 // runs every new io operation performed
 int wal_write(int wal_fd, char key[], char val[], int io_type) /* used to save the operations that led to the current conditions */ {
 
 	size_t buffer_len = (strlen(key) + strlen(val));
 
-	struct wal_struct *wal_record = Malloc(sizeof(struct wal_struct) + buffer_len);
+	struct wal_struct *wal_record = malloc(sizeof(struct wal_struct) + buffer_len);
 	
 	wal_record->total_len = (buffer_len + sizeof(struct wal_struct));
 	wal_record->io_type = io_type;
@@ -275,23 +272,24 @@ int wal_write(int wal_fd, char key[], char val[], int io_type) /* used to save t
 	wal_record->val_len = strlen(val);	
 	// fill wal_record's buffer
 	memcpy(wal_record->buffer, key, wal_record->key_len);
-	memcpy(wal_record->buffer[wal_record + wal_record->key_len], val, wal_record->val_len);
+	char* val_ptr = wal_record->buffer + wal_record->key_len;
+	memcpy(val_ptr, val, wal_record->val_len);
 
-	int written_bytes = Write(wal_fd, wal_record, wal_record->total_len);
+	int written_bytes = write(wal_fd, wal_record, wal_record->total_len);
 
 	if (written_bytes < wal_record->total_len) {
 		int total_written = written_bytes;
 		unsigned char* cur_pos; // a pointer at the starting index of the unwritten data in the struct
 		while (total_written < wal_record->total_len) {			
 			cur_pos = ((unsigned char*) wal_record + total_written);
-			written_bytes = Write(wal_fd, cur_pos, (wal_record->total_len - total_written));
+			written_bytes = write(wal_fd, cur_pos, (wal_record->total_len - total_written));
 			total_written += written_bytes;
 		}
 	}
 
-	Fsync(wal_fd); // flush all of the unsaved changes to the disk space
+	fsync(wal_fd); // flush all of the unsaved changes to the disk space
 
-	Free(wal_record);
+	free(wal_record);
 
 	return 0;
 
@@ -301,20 +299,20 @@ int wal_read(int wal_fd) {
 
 	while (1) {
 
-		struct wal_struct *wal_record_temp = Malloc(sizeof(struct wal_struct));
+		struct wal_struct *wal_record_temp = malloc(sizeof(struct wal_struct));
 
-		int read_bytes1 = Read(wal_fd, wal_record_temp, sizeof(struct wal_struct));
+		int read_bytes1 = read(wal_fd, wal_record_temp, sizeof(struct wal_struct));
 
 		if (read_bytes1 == 0) {
-			Free(wal_record_temp);
+			free(wal_record_temp);
 			break;
 		}
 
-		struct wal_struct *wal_record = Realloc(wal_record_temp, wal_record_temp->total_len); // reallocating the size of the struct because of the buffer
+		struct wal_struct *wal_record = realloc(wal_record_temp, wal_record_temp->total_len); // reallocating the size of the struct because of the buffer
 
-		int read_bytes2 = Read(wal_fd, wal_record->buffer, (wal_record_temp->total_len - sizeof(struct wal_struct) /* the size of the wal_record buffer */));
+		int read_bytes2 = read(wal_fd, wal_record->buffer, (wal_record_temp->total_len - sizeof(struct wal_struct) /* the size of the wal_record buffer */));
 
-		Free(wal_record);
+		free(wal_record);
 
 	}
 
@@ -323,7 +321,64 @@ int wal_read(int wal_fd) {
 }
 
 int main() {
+	
+	/* int wal_fd = open("wal_log.txt", O_APPEND | O_CREAT | O_RDWR, 0644); */
 
-	int wal_fd /* file for WAL logging */ = Open("wal_log.txt", O_APPEND | O_CREAT | O_RDWR, 0644):
+
+
+srand(1); // fixed seed so failures reproduce
+
+	arena a;
+	a.total_size = 1024 * 1024;
+	a.offset = 0;
+	a.mem_ptr = malloc(a.total_size);
+
+	mmt_inst mt;
+	memset(mt.headers, 0, sizeof(mt.headers));
+	mt.arena_mem = &a;
+
+	// put + lookup
+	assert(put_node("a", 1, "1", 1, IO_TYPE_SET_PUT, &mt) != NULL);
+	node* n = lookup_node("a", 1, &mt);
+	assert(n != NULL && n->val_len == 1);
+	assert(memcmp(n->buff_ptr + n->key_len, "1", 1) == 0);
+
+	// overwrite with a longer value
+	put_node("a", 1, "hello", 5, IO_TYPE_SET_PUT, &mt);
+	n = lookup_node("a", 1, &mt);
+	assert(n != NULL && n->val_len == 5);
+	assert(memcmp(n->buff_ptr + n->key_len, "hello", 5) == 0);
+
+	// prefix keys
+	put_node("cat", 3, "x", 1, IO_TYPE_SET_PUT, &mt);
+	put_node("cats", 4, "y", 1, IO_TYPE_SET_PUT, &mt);
+	assert(lookup_node("cat", 3, &mt) != NULL);
+	assert(lookup_node("cats", 4, &mt) != NULL);
+	assert(lookup_node("ca", 2, &mt) == NULL);
+
+	// delete
+	assert(delete_node("a", 1, &mt) == 0);
+	n = lookup_node("a", 1, &mt);
+	assert(n != NULL && n->del_status == IO_TYPE_SET_DEL);
+
+	// level 0 must be sorted
+	for (node* c = mt.headers[0]; c && c->next_ptrs[0]; c = c->next_ptrs[0]) {
+		node* nx = c->next_ptrs[0];
+     		size_t m = c->key_len < nx->key_len ? c->key_len : nx->key_len;
+        	int r = memcmp(c->buff_ptr, nx->buff_ptr, m);
+        	assert(r < 0 || (r == 0 && c->key_len < nx->key_len));
+    }
+
+	// fill the arena: should return NULL, not crash
+	char key[16];
+	int i = 0;
+	while (1) {
+        	int len = snprintf(key, sizeof(key), "k%d", i++);
+        	if (put_node(key, len, "v", 1, IO_TYPE_SET_PUT, &mt) == NULL) break;
+	}
+
+	printf("all tests passed\n");
+	free(a.mem_ptr);
+	return 0;
 
 }
