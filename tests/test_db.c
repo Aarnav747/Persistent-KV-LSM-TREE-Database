@@ -8,6 +8,8 @@
 #include "memtable.h"
 #include "wal.h"
 
+#include "debug.h"
+
 int main(void) {
 	srand(1); // fixed seed so failures reproduce
 
@@ -19,6 +21,8 @@ int main(void) {
 	mmt_inst mt;
 	memset(mt.headers, 0, sizeof(mt.headers));
 	mt.arena_mem = &a;
+
+	diff_fuzz(&mt);
 
 	// put + lookup
 	assert(put_node("a", 1, "1", 1, IO_TYPE_SET_PUT, &mt) != NULL);
@@ -43,7 +47,8 @@ int main(void) {
 	assert(delete_node("a", 1, &mt) == 0);
 	n = lookup_node("a", 1, &mt);
 	assert(n != NULL && n->del_status == IO_TYPE_SET_DEL);
-
+	
+	// write-ahead log 
 	int wal_fd = open("wal_log.txt", O_APPEND | O_CREAT | O_RDWR, 0644);
 
 	char key_wal[1024];
@@ -52,7 +57,7 @@ int main(void) {
 	memcpy(key_wal, mt.headers[0]->buff_ptr, mt.headers[0]->key_len);
 	memcpy(val_wal, mt.headers[0]->buff_ptr + mt.headers[0]->key_len, mt.headers[0]->val_len);
 
-	wal_write(wal_fd, key_wal, val_wal, IO_TYPE_SET_PUT);
+	wal_write(wal_fd, key_wal, mt.headers[0]->key_len, val_wal, mt.headers[0]->val_len, IO_TYPE_SET_PUT);
 
 	// level 0 must be sorted
 	for (node* c = mt.headers[0]; c && c->next_ptrs[0]; c = c->next_ptrs[0]) {

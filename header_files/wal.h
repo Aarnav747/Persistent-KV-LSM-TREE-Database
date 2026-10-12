@@ -16,7 +16,7 @@ struct wal_struct {                                      	size_t total_len; // t
 	/* key + val are added later in 'buffer' during the call to wal_write() */
 };
 
-int wal_write(int wal_fd, char key[], char val[], int io_type);
+int wal_write(int wal_fd, char key[], size_t key_len, char val[], size_t val_len, int io_type);
 
 int wal_read(int wal_fd);
 

@@ -1,15 +1,15 @@
 #include "wal.h"
 
 // runs every new io operation performed (basically when PUT/DELETE instructions are ran)
-int wal_write(int wal_fd, char key[], char val[], int io_type) /* used to save the operations that led to the current conditions */ {
-	size_t buffer_len = strlen(key) + strlen(val);
+int wal_write(int wal_fd, char key[], size_t key_len, char val[], size_t val_len, int io_type) /* used to save the operations that led to the current conditions */ {
+	size_t buffer_len = (key_len + val_len);
 
 	struct wal_struct *wal_record = malloc(sizeof(struct wal_struct) + buffer_len);
 
 	wal_record->total_len = buffer_len + sizeof(struct wal_struct);
 	wal_record->io_type = io_type;
-	wal_record->key_len = strlen(key);
-	wal_record->val_len = strlen(val);
+	wal_record->key_len = key_len;
+	wal_record->val_len = val_len;
 
 	// fill wal_record's buffer
 	memcpy(wal_record->buffer, key, wal_record->key_len);

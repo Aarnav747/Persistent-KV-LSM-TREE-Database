@@ -31,7 +31,10 @@ node* create_node(char key[], size_t key_len, char val[], size_t val_len, int io
 
 	node* cur_node = (node*)alloc_mem(arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))), _Alignof(node) /* align 8 bytes */);
 
-	if (cur_node == NULL) return NULL;
+	if (cur_node == NULL) {
+		printf("\nArena got full\n");
+		return NULL;
+	}
 
 	cur_node->layer_cnt = layer_cnt;
 	cur_node->key_len = key_len;
