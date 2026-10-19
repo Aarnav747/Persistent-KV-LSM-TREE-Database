@@ -72,18 +72,20 @@ void insert_node(node* cur_node, mmt_inst* cur_inst) {
 
 node* lookup_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 
-	node *past_nodes[MAX_LAYER_LEVEL];
+	node *past_nodes[MAX_LAYER_LEVEL] = {NULL};
 
 	traverse_layers(key, key_len, past_nodes, cur_inst, SEARCH_MODE_LOOKUP /* we do this in lookup, because while using lookup we might also want to actually search for the node to see if its in the list, thats what lookup is even for, so passing -1 as a parameter executes the branch where the same node is added to the past_nodes array aswell */); // by traversing the skip list and storing the previous nodes it becomes easier and faster to find the node with the key, we're searching for, compared to traversing the original skip list (which might take O(n)), this approach can possibly take O(log(n)) instead. and we can confirm that the node, if it exists, will be at layer 1 (the original skip list), so it will be at past_nodes[0] */
 								if (past_nodes[0] == NULL) return NULL;
 								int memcmp_ret = memcmp(key, past_nodes[0]->buff_ptr, key_len); // compares both keys, just in case
-								if (memcmp_ret == 0 && past_nodes[0]->key_len == key_len) return past_nodes[0];
-															return NULL;
-														}
+								if (memcmp_ret != 0 || past_nodes[0]->key_len != key_len) return NULL;
+	
+	return past_nodes[0];
+}
 
 node* put_node(char key[], size_t key_len, char val[], size_t val_len, int io_type, mmt_inst* cur_inst) {
 
 	node* old_node = lookup_node(key, key_len, cur_inst);
+
 	node* cur_node = create_node(key, key_len, val, val_len, io_type, cur_inst->arena_mem);
 
 	if (cur_node == NULL) {
@@ -101,26 +103,41 @@ node* put_node(char key[], size_t key_len, char val[], size_t val_len, int io_ty
 			past_node = past_nodes[n];
 
 			if (n < old_node->layer_cnt && n < cur_node->layer_cnt) /* both nodes exists at this layer */ {
-				if (past_node == NULL) /* we previously did not have this condition check, and it did cause segfaults when we tried to access past_node, but it turned out to be null. so here whenever it is the case, we just make the cur_node the header of that layer, cause no other node exists there yet */ {
+				if (past_node == NULL && old_node->next_ptrs[n] != NULL /* [15/10/26] also added this next_ptrs check, because before I was checking if next_node was null or not, without even allocating a value to it */) /* we previously did not have this condition check, and it did cause segfaults when we tried to access past_node, but it turned out to be null. so here whenever it is the case, we just make the cur_node the header of that layer, cause no other node exists there yet */ {
+					next_node = old_node->next_ptrs[n];
+					cur_node->next_ptrs[n] = next_node;
 					cur_inst->headers[n] = cur_node;
+					old_node->next_ptrs[n] = NULL; // [14/10/26] this was important, and I didnt pay attention to it before. If I hadnt set the next_ptrs null ,then old_node wouldve been still pointing to the node which is still in the list,and we dont want that. thats exactly what happend when I checked it btw
+					continue;
+				} else if (past_node == NULL && old_node->next_ptrs[n] == NULL) {
+					cur_inst->headers[n] = cur_node;
+					old_node->next_ptrs[n] = NULL;
 					continue;
 				}
 
 				next_node = old_node->next_ptrs[n];
 				past_node->next_ptrs[n] = cur_node;
 				cur_node->next_ptrs[n] = next_node;
+				old_node->next_ptrs[n] = NULL;
 
 			} else if (n < old_node->layer_cnt && n >= cur_node->layer_cnt) /* only old_node exists at this layer */ {
 											if (past_node == NULL) /* since cur_node obviously does not exist at this layer, and there is no past_node aswell, meaning old_node is the header, so we unlink it from that layer and make the header NULL, and that makes the layer empty */ {
-					cur_inst->headers[n] = NULL;
+												if (old_node->next_ptrs[n] != NULL) {
+						cur_inst->headers[n] = old_node->next_ptrs[n];								} else {
+						cur_inst->headers[n] = NULL;
+					}
+
+					old_node->next_ptrs[n] = NULL;
 					continue;
 				}
-
-				next_node = old_node->next_ptrs[n];
+				
+											next_node = old_node->next_ptrs[n];
 				past_node->next_ptrs[n] = next_node;
+				old_node->next_ptrs[n] = NULL;
 
 			} else if (n < cur_node->layer_cnt && n >= old_node->layer_cnt) /* only cur_node exists at this layer */ {
 											if (past_node == NULL) {
+					cur_node->next_ptrs[n] = cur_inst->headers[n];
 					cur_inst->headers[n] = cur_node;
 					continue;
 				}
@@ -134,7 +151,7 @@ node* put_node(char key[], size_t key_len, char val[], size_t val_len, int io_ty
 		return cur_node;
 	
 	}
-	
+
 	insert_node(cur_node, cur_inst);
 	
 	return cur_node;

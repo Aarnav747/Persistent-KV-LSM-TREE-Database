@@ -7,20 +7,31 @@
 #include "node.h"
 #include "memtable.h"
 #include "wal.h"
-
 #include "debug.h"
 
 int main(void) {
-	srand(1); // fixed seed so failures reproduce
+	srand(6969); // fixed seed so failures reproduce
 
 	arena a;
-	a.total_size = 1024 * 1024;
+	a.total_size = 16 * 1024 * 1024;
 	a.offset = 0;
 	a.mem_ptr = malloc(a.total_size);
 
 	mmt_inst mt;
 	memset(mt.headers, 0, sizeof(mt.headers));
 	mt.arena_mem = &a;
+
+	/*printf("Add K1: \n");
+	node* k1 = put_node("K1", 2, "V1", 2, IO_TYPE_SET_PUT, &mt);
+	dump_list(&mt);
+	printf("Add K2: \n");
+	node* k2 = put_node("K2", 2, "K2", 2, IO_TYPE_SET_PUT, &mt);
+	printf("K2 Added. K1's Next node: %.*s\n", (int)k1->next_ptrs[0]->key_len, k1->next_ptrs[0]->buff_ptr);
+	dump_list(&mt);
+	printf("Add K1 again: \n");
+	node* new_k1 = put_node("K1", 2, "K1", 2, IO_TYPE_SET_PUT, &mt);
+	printf("New K1 Added\n");
+	printf("New K1 Added again. New K1's Next node: %.*s\n", (int)new_k1->next_ptrs[0]->key_len, new_k1->next_ptrs[0]->buff_ptr);*/
 
 	diff_fuzz(&mt);
 
@@ -58,6 +69,8 @@ int main(void) {
 	memcpy(val_wal, mt.headers[0]->buff_ptr + mt.headers[0]->key_len, mt.headers[0]->val_len);
 
 	wal_write(wal_fd, key_wal, mt.headers[0]->key_len, val_wal, mt.headers[0]->val_len, IO_TYPE_SET_PUT);
+
+	memcpy(key_wal, mt.headers[1]->buff_ptr, mt.headers[1]->key_len);                                               memcpy(val_wal, mt.headers[1]->buff_ptr + mt.headers[1]->key_len, mt.headers[1]->val_len);                                                                              wal_write(wal_fd, key_wal, mt.headers[1]->key_len, val_wal, mt.headers[1]->val_len, IO_TYPE_SET_PUT);
 
 	// level 0 must be sorted
 	for (node* c = mt.headers[0]; c && c->next_ptrs[0]; c = c->next_ptrs[0]) {

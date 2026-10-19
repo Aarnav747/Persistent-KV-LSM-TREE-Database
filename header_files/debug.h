@@ -17,6 +17,8 @@ typedef struct fuzz_status_struct {
 	char val_buff[100];
 } fuzz_stat;
 
+void check_all(mmt_inst* cur_inst, fuzz_stat f_stat[], int key_cnt, int step);
+
 void diff_fuzz(mmt_inst* cur_inst);
 
 #endif
