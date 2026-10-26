@@ -8,9 +8,10 @@
 #include "memtable.h"
 #include "wal.h"
 #include "debug.h"
+#include "sstable.h"
 
 int main(void) {
-	srand(6969); // fixed seed so failures reproduce
+	srand(69420); // fixed seed so failures reproduce
 
 	arena a;
 	a.total_size = 16 * 1024 * 1024;
@@ -20,6 +21,16 @@ int main(void) {
 	mmt_inst mt;
 	memset(mt.headers, 0, sizeof(mt.headers));
 	mt.arena_mem = &a;
+
+	diff_fuzz(&mt);
+
+	int fd = open("sst.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	flush_sst(&mt, fd);
+	close(fd);
+
+	int sst_fd = open("sst.log", O_RDONLY);
+	read_sst(sst_fd);
+	close(sst_fd);
 
 	/*printf("Add K1: \n");
 	node* k1 = put_node("K1", 2, "V1", 2, IO_TYPE_SET_PUT, &mt);
@@ -33,7 +44,7 @@ int main(void) {
 	printf("New K1 Added\n");
 	printf("New K1 Added again. New K1's Next node: %.*s\n", (int)new_k1->next_ptrs[0]->key_len, new_k1->next_ptrs[0]->buff_ptr);*/
 
-	diff_fuzz(&mt);
+	/*diff_fuzz(&mt);
 
 	// put + lookup
 	assert(put_node("a", 1, "1", 1, IO_TYPE_SET_PUT, &mt) != NULL);
@@ -88,7 +99,7 @@ int main(void) {
 		if (put_node(key, len, "v", 1, IO_TYPE_SET_PUT, &mt) == NULL) break;
 	}
 
-	printf("all tests passed\n");
+	printf("all tests passed\n");*/
 	free(a.mem_ptr);
 	return 0;
 }

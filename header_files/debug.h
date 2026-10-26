@@ -7,8 +7,7 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#include "arena.h"
-#include "node.h"                                       #include "memtable.h"
+#include "memtable.h"
 
 typedef struct fuzz_status_struct {
 	bool mod_flag;

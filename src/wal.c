@@ -57,7 +57,7 @@ int wal_read(int wal_fd) {
 
         	struct wal_struct *wal_record = realloc(wal_record_temp, wal_record_temp->total_len); // reallocating the size of the struct because of the buffer
 
-		int read_bytes2 = read(wal_fd, wal_record->buffer, (wal_record_temp->total_len - sizeof(struct wal_struct)));
+		read(wal_fd, wal_record->buffer, (wal_record_temp->total_len - sizeof(struct wal_struct)));
 
 		free(wal_record);
 	}

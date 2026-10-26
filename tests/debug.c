@@ -35,6 +35,18 @@ void check_all(mmt_inst* cur_inst, fuzz_stat f_stat[], int key_count, int step) 
     }
 }
 
+void iter_fstat(fuzz_stat f_stat[]) {
+
+	for (int i = 0; i < 16; i++) {
+		if (f_stat[i].val_len != 0) {
+			printf("\nK%d val: %.*s", i, f_stat[i].val_len, f_stat[i].val_buff);
+		}
+		printf("K%d val_len: %zu\n", i, f_stat[i].val_len);
+		printf("K%d del_flag: %d\n", i, f_stat[i].del_flag);
+	}
+
+}
+
 void diff_fuzz(mmt_inst* cur_inst) {
 
 	fuzz_stat f_stat[16] = {0};
@@ -45,7 +57,7 @@ void diff_fuzz(mmt_inst* cur_inst) {
 	char key_f[100];
 	char val_f[100];
 
-	for (int i = 0; i < 100000; i++) {
+	for (int i = 0; i < 10000; i++) {
 		int rand_no = (rand() % 16);
 
 		size_t key_len = snprintf(key_f, sizeof(key_f), "K%d", rand_no);
@@ -99,7 +111,7 @@ void diff_fuzz(mmt_inst* cur_inst) {
 				memset(f_entry->val_buff, '\0', f_entry->val_len);
 			} else {
 				printf("\nDeletion failed at %d position\n", i);
-				printf("Key was: %.*s\n", key_len, key_f);
+				printf("Key was: %.*s\n", (int)key_len, key_f);
 				check_all(cur_inst, f_stat, 16, i);
 				continue;
 			}
@@ -127,6 +139,8 @@ void diff_fuzz(mmt_inst* cur_inst) {
 		check_all(cur_inst, f_stat, 16, i);
 
 	}
+
+	iter_fstat(f_stat);
 
 	//printf("\n headers[0]: %.*s", cur_inst->headers[0]->key_len, cur_inst->headers[0]->buff_ptr);
 

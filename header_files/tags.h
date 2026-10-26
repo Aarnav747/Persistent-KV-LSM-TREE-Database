@@ -1,5 +1,5 @@
-#ifndef TAGS.H
-#define TAGS.H
+#ifndef TAGS_H
+#define TAGS_H
 
 #define IO_TYPE_SET_PUT 0
 #define IO_TYPE_SET_DEL 1
