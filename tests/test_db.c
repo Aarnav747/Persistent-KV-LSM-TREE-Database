@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+#include <string.h>	
 
 #include "arena.h"
 #include "node.h"
@@ -11,26 +10,66 @@
 #include "sstable.h"
 
 int main(void) {
-	srand(69420); // fixed seed so failures reproduce
+	// srand(69420); // fixed seed so failures reproduce
 
-	arena a;
+	arena a;		
 	a.total_size = 16 * 1024 * 1024;
-	a.offset = 0;
-	a.mem_ptr = malloc(a.total_size);
+	
+	sst_arena sst_a;
+	sst_a.total_size = (MAX_KEY_SIZE + MAX_VAL_SIZE);
 
-	mmt_inst mt;
-	memset(mt.headers, 0, sizeof(mt.headers));
-	mt.arena_mem = &a;
+	int n = 1;
+	while (n != 100) {
+		srand(n);
 
-	diff_fuzz(&mt);
+		a.mem_ptr = malloc(a.total_size);
+		a.offset = 0;
 
-	int fd = open("sst.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	flush_sst(&mt, fd);
-	close(fd);
+		sst_a.mem_ptr = malloc(sst_a.total_size);
 
-	int sst_fd = open("sst.log", O_RDONLY);
-	read_sst(sst_fd);
-	close(sst_fd);
+		mmt_inst mt;
+		memset(mt.headers, 0, sizeof(mt.headers));
+		mt.arena_mem = &a;
+
+		fuzz_stat f_stat[16] = {0};
+
+		diff_fuzz(&mt, f_stat);
+
+		int fd = open("sst.tmp", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (fd == -1) {
+			printf("open Error\n");
+			return -1;
+		}
+
+		int flush_ret = flush_sst(&mt, fd, &sst_a);
+		if (flush_ret == -1) {
+			printf("Flush error\n");
+			return -1;
+		}
+		rename("sst.tmp", "sst.log");
+
+		close(fd);
+
+		int sst_fd = open("sst.log", O_RDONLY);
+		if (sst_fd == -1) {
+			printf("open Error\n");
+			return -1;
+		}
+
+		int read_ret = read_sst(sst_fd, &mt, &sst_a);
+		if (read_ret == -1) {
+			printf("Read error\n");
+			return -1;
+		}
+
+		close(sst_fd);
+
+		free(a.mem_ptr);
+		free(sst_a.mem_ptr);
+
+		//printf("Iteration %d completed\n", n);
+		n++;
+	}
 
 	/*printf("Add K1: \n");
 	node* k1 = put_node("K1", 2, "V1", 2, IO_TYPE_SET_PUT, &mt);
@@ -100,6 +139,6 @@ int main(void) {
 	}
 
 	printf("all tests passed\n");*/
-	free(a.mem_ptr);
+	//free(a.mem_ptr);
 	return 0;
 }

@@ -1,6 +1,8 @@
 #include "memtable.h"
 
 void traverse_layers(char key[], size_t key_len, node* past_nodes[], mmt_inst* cur_inst, int stop_before_match /* this parameter helps traversal differentiate between what the caller wants. If it's, say, lookup calling, we most definitely need the same node (if it exists in the list). but if another function is calling, we might instead want to skip whenever iterating at that layer. Otherwise, it could cause problems while unlinking in put_node later on, which is why we added this parameter. */) {
+	if (key_len > MAX_KEY_SIZE) assert(0);
+
 	int memcmp_ret;
 	node* cur_node = NULL;
 	node* past_node = NULL;
@@ -72,6 +74,8 @@ void insert_node(node* cur_node, mmt_inst* cur_inst) {
 
 node* lookup_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 
+	if (key_len > MAX_KEY_SIZE) return NULL;
+
 	node *past_nodes[MAX_LAYER_LEVEL] = {NULL};
 
 	traverse_layers(key, key_len, past_nodes, cur_inst, SEARCH_MODE_LOOKUP /* we do this in lookup, because while using lookup we might also want to actually search for the node to see if its in the list, thats what lookup is even for, so passing -1 as a parameter executes the branch where the same node is added to the past_nodes array aswell */); // by traversing the skip list and storing the previous nodes it becomes easier and faster to find the node with the key, we're searching for, compared to traversing the original skip list (which might take O(n)), this approach can possibly take O(log(n)) instead. and we can confirm that the node, if it exists, will be at layer 1 (the original skip list), so it will be at past_nodes[0] */
@@ -83,6 +87,8 @@ node* lookup_node(char key[], size_t key_len, mmt_inst* cur_inst) {
 }
 
 node* put_node(char key[], size_t key_len, char val[], size_t val_len, int io_type, mmt_inst* cur_inst) {
+
+	if (key_len > MAX_KEY_SIZE || val_len > MAX_VAL_SIZE) return NULL;
 
 	node* old_node = lookup_node(key, key_len, cur_inst);
 

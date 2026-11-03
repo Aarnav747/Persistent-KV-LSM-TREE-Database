@@ -18,6 +18,6 @@ typedef struct fuzz_status_struct {
 
 void check_all(mmt_inst* cur_inst, fuzz_stat f_stat[], int key_cnt, int step);
 
-void diff_fuzz(mmt_inst* cur_inst);
+void diff_fuzz(mmt_inst* cur_inst, fuzz_stat f_stat[]);
 
 #endif

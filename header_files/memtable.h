@@ -5,6 +5,7 @@
 #include "arena.h"
 #include <string.h>
 #include <sys/param.h>
+#include <assert.h>
 
 typedef struct skip_list_node_struct node;
 

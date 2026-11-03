@@ -29,17 +29,19 @@ int pick_layercnt() /* a function that is used to select the no. of layers for e
 node* create_node(char key[], size_t key_len, char val[], size_t val_len, int io_type, arena* arena_mem /* arena parameter instead of mmt_inst, because using mmt_inst as a parameter in node files, would create a circular dependency */) {
 	int layer_cnt = pick_layercnt();
 
+	if (key_len > MAX_KEY_SIZE || val_len > MAX_VAL_SIZE || io_type > UINT8_MAX) return NULL;
+
 	node* cur_node = (node*)alloc_mem(arena_mem, (sizeof(node) + key_len + val_len + (layer_cnt * sizeof(node*))), _Alignof(node) /* align 8 bytes */);
 
 	if (cur_node == NULL) {
 		printf("\nArena got full\n");
 		return NULL;
 	}
-
+	
 	cur_node->layer_cnt = layer_cnt;
-	cur_node->key_len = key_len;
-	cur_node->val_len = val_len;
-	cur_node->del_status = io_type;
+	cur_node->key_len = (uint32_t)key_len;
+	cur_node->val_len = (uint32_t)val_len;
+	cur_node->del_status = (uint8_t)io_type;
 
 	cur_node->buff_ptr = cur_node->buffer + (layer_cnt * sizeof(node*));
 

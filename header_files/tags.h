@@ -9,4 +9,11 @@
 
 #define MAX_LAYER_LEVEL 16
 
+#define MAX_KEY_SIZE 64*1024
+#define MAX_VAL_SIZE 16*1024*1024
+
+#define SST_KEYLEN_SIZE 4
+#define SST_VALLEN_SIZE 4
+#define SST_IOTYPE_SIZE 1
+
 #endif

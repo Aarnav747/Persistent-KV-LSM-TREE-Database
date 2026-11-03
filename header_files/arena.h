@@ -3,6 +3,7 @@
 
 #include "tags.h"
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct arena_struct {
 	char* mem_ptr;

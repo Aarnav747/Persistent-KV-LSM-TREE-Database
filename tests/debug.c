@@ -19,7 +19,7 @@ void check_all(mmt_inst* cur_inst, fuzz_stat f_stat[], int key_count, int step) 
             if (n == NULL || n->del_status != IO_TYPE_SET_DEL || n->val_len != 0) {
                 printf("step %d: K%d should be a tombstone\n", step, k);
                 printf("n=%p", (void*)n);
-                if (n) printf(" del_status=%d val_len=%zu", n->del_status, n->val_len);
+                if (n) printf(" del_status=%d val_len=%u", n->del_status, n->val_len);
                 printf("\n");
                 assert(0);
             }
@@ -39,7 +39,7 @@ void iter_fstat(fuzz_stat f_stat[]) {
 
 	for (int i = 0; i < 16; i++) {
 		if (f_stat[i].val_len != 0) {
-			printf("\nK%d val: %.*s", i, f_stat[i].val_len, f_stat[i].val_buff);
+			printf("\nK%d val: %.*s", i, (int)f_stat[i].val_len, f_stat[i].val_buff);
 		}
 		printf("K%d val_len: %zu\n", i, f_stat[i].val_len);
 		printf("K%d del_flag: %d\n", i, f_stat[i].del_flag);
@@ -47,9 +47,7 @@ void iter_fstat(fuzz_stat f_stat[]) {
 
 }
 
-void diff_fuzz(mmt_inst* cur_inst) {
-
-	fuzz_stat f_stat[16] = {0};
+void diff_fuzz(mmt_inst* cur_inst, fuzz_stat f_stat[]) {
 
 	node* found_node = NULL;
 	node* cur_node = NULL;
@@ -96,7 +94,7 @@ void diff_fuzz(mmt_inst* cur_inst) {
 				printf("Node in f_stat array: %.*s\n", (int)f_stat[rand_no].val_len, f_stat[rand_no].val_buff);
 				printf("Node in skip list: %.*s\n", (int)found_node->val_len, found_node->buff_ptr + key_len);
 				printf("Node val_len in f_stat array: %zu\n", f_stat[rand_no].val_len);
-				printf("Node val_len in skip list: %zu\n", found_node->val_len);
+				printf("Node val_len in skip list: %u\n", found_node->val_len);
 				assert(0);
 			}	
 
@@ -140,7 +138,7 @@ void diff_fuzz(mmt_inst* cur_inst) {
 
 	}
 
-	iter_fstat(f_stat);
+	//iter_fstat(f_stat);
 
 	//printf("\n headers[0]: %.*s", cur_inst->headers[0]->key_len, cur_inst->headers[0]->buff_ptr);
 
@@ -156,5 +154,5 @@ void diff_fuzz(mmt_inst* cur_inst) {
 		printf("cur_node value: %.*s\n", cur_node->val_len, cur_node->buff_ptr + cur_node->key_len);
 	}*/
 
-	printf("\nfuzz passed\n");
+	//printf("\nfuzz passed\n");
 }
